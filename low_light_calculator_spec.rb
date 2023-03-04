@@ -48,6 +48,45 @@ RSpec.describe LowLightCalculator do
     end
   end
 
+  describe 'Low light hour calculation' do
+    it 'returns the correct low light hours for a given time range' do
+      #  third shift
+      start_time = Time.new(2022, 3, 3, 6, 30, 0, '-05:00')
+      end_time = Time.new(2022, 3, 4, 14, 30, 0, '-05:00')
+
+      actual_result = l.calculate_low_light_hours(start_time, end_time)
+
+      expect(actual_result).to eq(expected_result)
+    end
+
+    it 'raises an error if the start time is after sunset' do
+      start_time = Time.new(2023, 3, 3, 18, 0, 0, '-05:00')
+      end_time = Time.new(2023, 3, 4, 7, 0, 0, '-05:00')
+
+      expect { calculate_low_light_hours(start_time, end_time) }.to raise_error('Start time is after sunset')
+    end
+
+    it 'raises an error if the end time is before sunrise' do
+      start_time = Time.new(2023, 3, 3, 17, 30, 0, '-05:00')
+      end_time = Time.new(2023, 3, 4, 6, 0, 0, '-05:00')
+
+      expect { calculate_low_light_hours(start_time, end_time) }.to raise_error('End time is before sunrise')
+    end
+  end
+
+  describe '#generate_shift_schedule' do
+    it 'generates the correct number of shifts' do
+      schedule = l.generate_shift_schedule
+      expect(schedule.length).to eq(1092)
+    end
+  end
+
+  describe "low_light_calculator" do
+    it "returns the correct number of low light hours" do
+      expect(l.calculate_low_light_hours_per_shift).to eq(1092)
+    end
+  end
+
   describe '#shift_start_times' do
     it 'returns an array of shift start times in EST timezone' do
       expected_start_times = [

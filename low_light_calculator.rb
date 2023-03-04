@@ -6,12 +6,17 @@ require 'json'
 
 class LowLightCalculator
 
+  attr_reader :schedule
+
   def initialize(sunrise_sunset_data_file_name = "sunrise_sunset_unix.csv")
     @sunrise_sunset_data_file_name = sunrise_sunset_data_file_name
+    @schedule = generate_shift_schedule
     Time.zone = ActiveSupport::TimeZone.new('America/New_York')
   end
 
-  # @sunrise_sunset_data_file_name = "sunrise_sunset_unix.csv"
+  def run
+    calculate_low_light_hours_per_shift
+  end
 
   # Define the shift start and end times
   def shift_start_times
@@ -31,11 +36,11 @@ class LowLightCalculator
   end
 
   def starting_date
-    sunrise_sunset_data.first[:date]
+    Time.parse(sunrise_sunset_data.first[:date])
   end
 
   def ending_date
-    sunrise_sunset_data.last[:date]
+    Time.parse(sunrise_sunset_data.last[:date])
   end
 
   def sunrise_sunset_data
@@ -55,8 +60,9 @@ class LowLightCalculator
 
   def convert_to_est(data)
     data = data.map do |row|
-      sunrise_est = force_time(Time.at(row[:sunrise].to_i).utc)
-      sunset_est = force_time(Time.at(row[:sunset].to_i).utc)
+
+      sunrise_est = ((force_time(Time.at(row[:sunrise].to_i).utc)) - 1.hour) - 30.minutes
+      sunset_est = ((force_time(Time.at(row[:sunset].to_i).utc)) - 1.hour) - 30.minutes
       row[:date] = force_time(Time.at(row[:sunset].to_i).utc).strftime('%Y-%m-%d')
       row[:sunrise] = sunrise_est.strftime('%H:%M:%S')
       row[:sunset] = sunset_est.strftime('%H:%M:%S')
@@ -79,63 +85,149 @@ class LowLightCalculator
     { sunrise: nil, sunset: nil }
   end
 
-  def calculate_low_light_hours(date, shift_start, shift_end)
-    # Convert times to Eastern Standard Time
-    est = ActiveSupport::TimeZone.new('Eastern Time (US & Canada)')
-    # Look up the sunrise and sunset times for the given date
-    sunrise_sunset = lookup_sunrise_sunset(date)
-    sunrise = sunrise_sunset[:sunrise]
-    sunset = sunrise_sunset[:sunset]
+  def calculate_overlap_hours(start_time_1, end_time_1, start_time_2, end_time_2)
+    # Check for overlap on the first day
+    max_start_time_1 = start_time_1
+    min_end_time_1 = [end_time_1, start_time_1 + 1.day].min
+    overlap_hours_1 = [(min_end_time_1 - max_start_time_1) / 3600.0, 0].max
 
-    # Convert shift start and end times to Eastern Standard Time
-    shift_start_est = shift_start.in_time_zone(est)
-    shift_end_est = shift_end.in_time_zone(est)
+    # Check for overlap on the second day
+    max_start_time_2 = [start_time_2, end_time_1].max
+    min_end_time_2 = end_time_2
+    overlap_hours_2 = [(min_end_time_2 - max_start_time_2) / 3600.0, 0].max
 
-    # Convert sunrise and sunset times to UTC timezone
-    sunrise_est = sunrise.in_time_zone(est).utc.to_datetime
-    sunset_est = sunset.in_time_zone(est).utc.to_datetime
-
-    # Calculate the maximum number of low light hours for the shift
-    max_low_light_hours = [(shift_end_est - shift_start_est) / 3600.0, 8.0].min
-
-    # Determine the start and end times of the low light period
-    sunrise_time_est = [sunrise_est, shift_start_est.to_datetime].max
-    sunset_time_est = [sunset_est, shift_end_est.to_datetime].min
-
-    # If the shift ends on the next day, adjust the sunset time to midnight
-    if shift_end_est < shift_start_est
-      sunset_time_est = est.parse('00:00:00').utc.to_datetime
-    end
-
-    # Calculate the number of low light hours for the shift
-    low_light_hours = [sunset_time_est - sunrise_time_est, 0].max / 3600.0
-    low_light_hours = [low_light_hours, max_low_light_hours].min
-    low_light_hours = [low_light_hours, 8.0].min
-    low_light_hours.abs
+    # Return the total overlap duration
+    overlap_hours_1 + overlap_hours_2
   end
 
-  def calculate_low_light_per_shift_per_day(output_file = 'low_light_hours.csv')
-    # Open the output file for writing
-    CSV.open(output_file, 'w') do |csv|
-      # Write the headers to the CSV file
-      csv << ['Date', 'Shift 1 Low Light Hours', 'Shift 2 Low Light Hours', 'Shift 3 Low Light Hours']
+  def calculate_low_light_hours_per_shift
+    low_light_hours_per_shift = {}
 
-      # Loop over each day in the sunrise/sunset data
-      (starting_date..ending_date).each do |date|
-        # Loop over each shift and calculate the low light hours
-        shift_low_light_hours = shift_start_times.zip(shift_end_times).map do |(shift_start, shift_end)|
-          binding.pry
-          shift_start_date_time = date + shift_start.to_time.seconds_since_midnight.seconds
-          shift_end_date_time = date + shift_end.to_time.seconds_since_midnight.seconds
-          low_light_hours = calculate_low_light_hours(date.to_s, shift_start_date_time, shift_end_date_time)
-          low_light_hours.round(2)
-        end
+    schedule.each do |shift|
+      start_time = force_time shift[:start_time]
+      end_time = force_time shift[:end_time]
 
-        # Write the data to the CSV file
-        row = [date.strftime('%Y-%m-%d')] + shift_low_light_hours
-        csv << row
+      sunrise_row = sunrise_sunset_data.find { |row| row[:date] == end_time.strftime('%Y-%m-%d') }
+
+      first_sunrise = Time.parse(start_time.strftime('%Y-%m-%d') + " " + sunrise_row[:sunrise])
+      first_sunset = Time.parse(start_time.strftime('%Y-%m-%d') + " " + sunrise_row[:sunset])
+
+      second_sunrise = nil
+      if start_time > first_sunset
+        second_sunrise_row = sunrise_sunset_data.find { |row| row[:date] == end_time.strftime('%Y-%m-%d') }
+        second_sunrise = Time.parse(end_time.strftime('%Y-%m-%d') + " " + second_sunrise_row[:sunrise])
+      end
+
+      darkness = case shift[:start_time].strftime('%H:%M:%S')
+                 when '06:30:00'
+                   shift_1(start_time, end_time, first_sunrise, first_sunset)
+                 when '14:30:00'
+                   shift_2(start_time, end_time, first_sunset)
+                 when '22:30:00'
+                   shift_3(start_time, end_time, second_sunrise)
+                 end
+
+      low_light_hours_per_shift[shift] = { start_time: start_time,
+                                           end_time: end_time,
+                                           first_sunrise: first_sunrise,
+                                           first_sunset: first_sunset,
+                                           second_sunrise: second_sunrise,
+                                           darkness: darkness
+      }
+    rescue
+      nil
+    end
+
+    low_light_hours_per_shift
+  end
+
+  def shift_1(start_time, end_time, sunrise, sunset)
+    darkness = 0.0
+    if start_time < sunrise
+      darkness += max_length(sunrise, start_time)
+    end
+
+    if start_time < sunset && end_time > sunset
+      darkness += max_length(sunset, end_time)
+    end
+
+    [darkness, 480].min
+  end
+
+  def shift_2(start_time, end_time, sunset)
+    darkness = 0.0
+    if start_time < sunset
+      darkness += max_length(sunset, end_time)
+    end
+
+    [darkness, 480].min
+  end
+
+  def shift_3(start_time, end_shift, next_sunrise)
+    [max_length(start_time, [end_shift, next_sunrise].min), 480].min
+  end
+
+  def group_low_light_hours_by_start_time(csv_filename = 'low_light_hours.csv')
+    low_light_hours_by_start_time = { 'A' => [], 'B' => [], 'C' => [] }
+
+    CSV.foreach(csv_filename, headers: true) do |row|
+      start_time_str = row['Start Time']
+      start_time = DateTime.parse(start_time_str)
+
+      if start_time.hour < 8
+        low_light_hours_by_start_time['A'] << row.to_h
+      elsif start_time.hour < 16
+        low_light_hours_by_start_time['B'] << row.to_h
+      else
+        low_light_hours_by_start_time['C'] << row.to_h
       end
     end
+
+    low_light_hours_by_start_time
+  end
+
+  def to_csv(filename = 'low_light_hours.csv')
+    CSV.open(filename, 'wb') do |csv|
+      csv << ["DATE", 'shift start time', 'shift end time', "first sunrise", "first sunset", "second_sunrise", 'Darkness (minutes)', "% of Shift"]
+      calculate_low_light_hours_per_shift.each do |shift, info|
+        date = shift.dig(:start_time)&.strftime('%Y-%m-%d')
+        start_time = info.dig(:start_time)&.strftime('%H:%M:%S')
+        end_time = info.dig(:end_time)&.strftime('%H:%M:%S')
+        first_sunrise = info.dig(:first_sunrise)&.strftime('%H:%M:%S')
+        first_sunset = info.dig(:first_sunset)&.strftime('%H:%M:%S')
+        second_sunrise = info.dig(:second_sunrise)&.strftime('%Y-%m-%d %H:%M:%S')
+        darkness = info[:darkness].round(1)
+        percent_of_shift = ((darkness / 480) * 100).round(1)
+        csv << [date, start_time, end_time, first_sunrise, first_sunset, second_sunrise, darkness, percent_of_shift]
+      end
+    end
+  end
+
+  private
+
+  def max_length(a, b)
+    minutes = ((a - b).abs) / 60
+    minutes >= 480 ? 480 : minutes
+  end
+
+  def generate_shift_schedule
+    schedule = []
+
+    current_date = starting_date
+    while current_date <= ending_date do
+      shift_start_times.each_with_index do |start_time, index|
+        shift_end_time = shift_end_times[index]
+        shift_start = DateTime.new(current_date.year, current_date.month, current_date.day, start_time.hour, start_time.minute, start_time.second, start_time.offset)
+        shift_end = DateTime.new(current_date.year, current_date.month, current_date.day, shift_end_time.hour, shift_end_time.minute, shift_end_time.second, shift_end_time.offset)
+        if shift_end < shift_start
+          shift_end += 1.day
+        end
+        schedule << { start_time: shift_start, end_time: shift_end }
+      end
+      current_date += 1.day
+    end
+
+    schedule
   end
 end
 

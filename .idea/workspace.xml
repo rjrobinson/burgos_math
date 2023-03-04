@@ -5,12 +5,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="f7f7911e-be36-48e6-b397-ccd9e5abe1e4" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/.ruby-version" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.gitignore" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/burgos_math.iml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/modules.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/main.rb" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/sunrise_sunset.csv" beforeDir="false" afterPath="$PROJECT_DIR$/sunrise_sunset.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/low_light_calculator.rb" beforeDir="false" afterPath="$PROJECT_DIR$/low_light_calculator.rb" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/low_light_calculator_spec.rb" beforeDir="false" afterPath="$PROJECT_DIR$/low_light_calculator_spec.rb" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -88,7 +85,7 @@
       <option name="presentableId" value="Default" />
       <updated>1677866345486</updated>
       <workItem from="1677866346594" duration="125000" />
-      <workItem from="1677866481669" duration="6700000" />
+      <workItem from="1677866481669" duration="24569000" />
     </task>
     <servers />
   </component>
@@ -97,5 +94,19 @@
   </component>
   <component name="VgoProject">
     <settings-migrated>true</settings-migrated>
+  </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" type="ruby-line">
+          <url>file://$PROJECT_DIR$/low_light_calculator.rb</url>
+          <line>49</line>
+          <properties myBlockOrdinal="-1">
+            <option name="block-ordinal" value="-1" />
+          </properties>
+          <option name="timeStamp" value="6" />
+        </line-breakpoint>
+      </breakpoints>
+    </breakpoint-manager>
   </component>
 </project>
